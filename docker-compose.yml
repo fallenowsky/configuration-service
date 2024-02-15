@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  currency-provider-service:
+    build: ../currency-provider
+    container_name: currency_provider
+    ports:
+      - "8081:8081"
+    networks:
+      - micro_network
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: "exit 0"
+
+  currency-persistence-service:
+    build: ../currency-persistence-service
+    container_name: currency_persistence_service
+    ports:
+      - "8082:8082"
+    depends_on:
+      database:
+        condition: service_healthy
+      currency-provider-service:
+        condition: service_healthy
+    restart: always
+    networks:
+      - micro_network
+    healthcheck:
+      test: "exit 0"
+
+  currency-exchange-service:
+    build: ../exchange-api-service
+    container_name: currency_exchange_api
+    ports:
+      - "8083:8083"
+    restart: always
+    depends_on:
+       currency-persistence-service:
+         condition: service_healthy
+       keycloak:
+           condition: service_healthy
+    networks:
+      - micro_network
+    healthcheck:
+      test: "exit 0"
+
+  currency-mail-service:
+    build: ../mail-service
+    container_name: currency_mail_service
+    ports:
+      - "8084:8084"
+    depends_on:
+      currency-exchange-service:
+        condition: service_healthy
+    restart: always
+    networks:
+     - micro_network
+
+
+  database:
+    image: mysql:latest
+    container_name: database
+    environment:
+      MYSQL_DATABASE: rates
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    ports:
+      - "3306:3306"
+    networks:
+      - micro_network
+    healthcheck:
+      test: "exit 0"
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq_server
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - micro_network
+    healthcheck:
+      test: "exit 0"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.6
+    restart: always
+    command: start-dev
+    container_name: keycloak
+    environment:
+       KC_DB: postgres
+       KC_DB_URL_HOST: postgres_keycloak
+       KC_DB_URL_DATABASE: keycloak
+       KC_DB_PASSWORD: password
+       KC_DB_USERNAME: keycloak
+       KEYCLOAK_ADMIN_PASSWORD: admin
+       KEYCLOAK_ADMIN: admin
+    ports:
+      - "8080:8080"
+    networks:
+      - micro_network
+    depends_on:
+      postgres_keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: "exit 0"
+
+  postgres_keycloak:
+    image: postgres:latest
+    restart: always
+    volumes:
+      - pg_data_keycloak:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5436:5436"
+    networks:
+      - micro_network
+    healthcheck:
+      test: "exit 0"
+
+volumes:
+  pg_data_keycloak:
+
+networks:
+  micro_network:
+    driver: bridge
+

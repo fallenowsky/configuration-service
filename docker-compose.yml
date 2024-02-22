@@ -3,7 +3,11 @@ version: '3.8'
 services:
   currency-provider-service:
     build: ../currency-provider
-    container_name: currency_provider
+    container_name: currency-provider
+    environment:
+      RABBIT_ADDRESSES: rabbitmq:5672
+      RABBIT_USERNAME: guest
+      RABBIT_PASSWORD: guest
     ports:
       - "8081:8081"
     networks:
@@ -16,7 +20,15 @@ services:
 
   currency-persistence-service:
     build: ../currency-persistence-service
-    container_name: currency_persistence_service
+    container_name: currency-persistence-service
+    environment:
+      RABBIT_ADDRESSES: rabbitmq:5672
+      RABBIT_USERNAME: guest
+      RABBIT_PASSWORD: guest
+      MYSQL_ADDRESSES: database:3306
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: rates
     ports:
       - "8082:8082"
     depends_on:
@@ -32,15 +44,24 @@ services:
 
   currency-exchange-service:
     build: ../exchange-api-service
-    container_name: currency_exchange_api
+    container_name: currency-exchange-service
     ports:
       - "8083:8083"
     restart: always
+    environment:
+      RABBIT_ADDRESSES: rabbitmq:5672
+      RABBIT_USERNAME: guest
+      RABBIT_PASSWORD: guest
+      MYSQL_ADDRESSES: database:3306
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_DATABASE: rates
+      KEYCLOAK_ADDRESSES: keycloak:8080
     depends_on:
-       currency-persistence-service:
-         condition: service_healthy
-       keycloak:
-           condition: service_healthy
+      currency-persistence-service:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
     networks:
       - micro_network
     healthcheck:
@@ -48,16 +69,20 @@ services:
 
   currency-mail-service:
     build: ../mail-service
-    container_name: currency_mail_service
+    container_name: currency-mail-service
     ports:
       - "8084:8084"
+    environment:
+      RABBIT_ADDRESSES: rabbitmq:5672
+      RABBIT_USERNAME: guest
+      RABBIT_PASSWORD: guest
+      APP_PORT: 8084
     depends_on:
       currency-exchange-service:
         condition: service_healthy
     restart: always
     networks:
-     - micro_network
-
+      - micro_network
 
   database:
     image: mysql:latest
@@ -76,7 +101,7 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    container_name: rabbitmq_server
+    container_name: rabbitmq
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -91,28 +116,33 @@ services:
     command: start-dev
     container_name: keycloak
     environment:
-       KC_DB: postgres
-       KC_DB_URL_HOST: postgres_keycloak
-       KC_DB_URL_DATABASE: keycloak
-       KC_DB_PASSWORD: password
-       KC_DB_USERNAME: keycloak
-       KEYCLOAK_ADMIN_PASSWORD: admin
-       KEYCLOAK_ADMIN: admin
+      DB_PORT: 5436
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres-keycloak
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_PASSWORD: password
+      KC_DB_USERNAME: keycloak
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_STATISTICS: all
+      KEYCLOAK_LOGLEVEL: DEBUG
     ports:
       - "8080:8080"
     networks:
       - micro_network
     depends_on:
-      postgres_keycloak:
+      postgres-keycloak:
         condition: service_healthy
     healthcheck:
       test: "exit 0"
 
-  postgres_keycloak:
-    image: postgres:latest
+  postgres-keycloak:
+    image: postgres:14.2
+    container_name: postgres-keycloak
     restart: always
     volumes:
-      - pg_data_keycloak:/var/lib/postgresql/data
+      - keycloak_postgresql:/var/lib/postgresql
+      - keycloak_postgresql_data:/var/lib/postgresql/data
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
@@ -124,8 +154,19 @@ services:
     healthcheck:
       test: "exit 0"
 
+  php-my-admin:
+    image: phpmyadmin
+    container_name: php-my-admin
+    ports:
+      - "8090:80"
+    environment:
+      PMA_ARBITRARY: 1
+    networks:
+      - micro_network
+
 volumes:
-  pg_data_keycloak:
+  keycloak_postgresql:
+  keycloak_postgresql_data:
 
 networks:
   micro_network:

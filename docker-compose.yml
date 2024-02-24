@@ -151,7 +151,7 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: password
     ports:
-      - "5436:5436"
+      - "5432:5432"
     networks:
       - micro_network
     healthcheck:
